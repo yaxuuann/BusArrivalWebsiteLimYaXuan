@@ -94,11 +94,34 @@ if bus_stop_code:
         # Parse and format the data
         data = parse_bus_arrival_data(services)
         
-        # Display bus arrival times
+        # Display bus arrival times in a card-like format
         st.write(f"Bus Arrival Times for Stop Code: {bus_stop_code}")
-        st.dataframe(data)
         
-        # Optional: Add a bar chart for estimated arrival times
-        st.bar_chart(data.set_index("Bus Number")["Estimated Arrival"])
+        # Use columns to create a grid layout
+        cols = st.columns(2)  # Adjust the number of columns as needed
+        
+        for index, row in data.iterrows():
+            with cols[index % 2]:  # Distribute cards across columns
+                st.markdown(
+                    f"""
+                    <div style="border: 1px solid #e0e0e0; border-radius: 10px; padding: 10px; margin: 10px 0;">
+                        <h3>Bus {row['Bus Number']}</h3>
+                        <p><b>Estimated Arrival:</b> {row['Estimated Arrival']}</p>
+                        <p><b>Load:</b> {row['Load']}</p>
+                        <p><b>Feature:</b> {row['Feature']}</p>
+                        <p><b>Vehicle Type:</b> {row['Vehicle Type']}</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+        
+        # Optional: Add a countdown timer or progress bar for estimated arrival
+        st.write("### Estimated Arrival Progress")
+        for index, row in data.iterrows():
+            if row["Estimated Arrival"] != "Not Available":
+                arrival_time = datetime.strptime(row["Estimated Arrival"], "%I:%M %p")
+                time_left = (arrival_time - datetime.now()).total_seconds() / 60  # Time left in minutes
+                st.write(f"Bus {row['Bus Number']}: {max(0, int(time_left))} minutes left")
+                st.progress(max(0, min(1, time_left / 30)))  # Progress bar for up to 30 minutes
     else:
         st.error(f"Bus Stop Code {bus_stop_code} is invalid or no data available. Please enter a valid bus stop code.")
