@@ -1,9 +1,7 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
-import streamlit as st
 import requests
 import pandas as pd
+from datetime import datetime
 
 # LTA DataMall API details
 API_URL = "https://datamall2.mytransport.sg/ltaodataservice/v3/BusArrival"
@@ -18,30 +16,74 @@ def fetch_bus_arrival_data(bus_stop_code):
     params = {"BusStopCode": bus_stop_code}
     response = requests.get(API_URL, headers=headers, params=params)
     
+    # Debugging: Print the raw response
+    print("Status Code:", response.status_code)
+    print("Raw Response:", response.text)
+    
     if response.status_code == 200:
-        data = response.json()
-        if "Services" in data:
-            return data["Services"]
-        else:
+        try:
+            data = response.json()
+            if "Services" in data:
+                return data["Services"]
+            else:
+                st.error("No bus services found for this stop.")
+                return None
+        except requests.exceptions.JSONDecodeError:
+            st.error("Invalid API response. Please check your API key or try again later.")
             return None
     else:
+        st.error(f"API Error: {response.status_code} - {response.text}")
         return None
 
-# Function to parse and format the data
+# Function to parse and format the data into a user-friendly layout
 def parse_bus_arrival_data(services):
     bus_data = []
     for service in services:
+        next_bus = service["NextBus"]
+        second_bus = service["NextBus2"]
+        third_bus = service["NextBus3"]
+        
+        # Convert "SD" to "Single Deck", "DD" to "Double Deck", etc.
+        vehicle_type = next_bus["Type"]
+        if vehicle_type == "SD":
+            vehicle_type = "Single Deck"
+        elif vehicle_type == "DD":
+            vehicle_type = "Double Deck"
+        elif vehicle_type == "BD":
+            vehicle_type = "Bendy Bus"
+        
+        # Convert "WAB" to "Wheelchair Accessible"
+        feature = next_bus["Feature"]
+        if feature == "WAB":
+            feature = "Wheelchair Accessible"
+        
+        # Convert "SEA" to "Seats Available", "SDA" to "Standing Available", etc.
+        load = next_bus["Load"]
+        if load == "SEA":
+            load = "Seats Available"
+        elif load == "SDA":
+            load = "Standing Available"
+        elif load == "LSD":
+            load = "Limited Standing"
+        
+        # Convert ISO timestamp to a user-friendly format (e.g., "09:44 AM")
+        estimated_arrival = next_bus["EstimatedArrival"]
+        if estimated_arrival:
+            estimated_arrival = datetime.fromisoformat(estimated_arrival).strftime("%I:%M %p")
+        else:
+            estimated_arrival = "Not Available"
+        
         bus_data.append({
-            "BusNumber": service["ServiceNo"],
-            "EstimatedArrival": service["NextBus"]["EstimatedArrival"],
-            "Load": service["NextBus"]["Load"],
-            "Feature": service["NextBus"]["Feature"],
-            "Type": service["NextBus"]["Type"]
+            "Bus Number": service["ServiceNo"],
+            "Estimated Arrival": estimated_arrival,
+            "Load": load,
+            "Feature": feature,
+            "Vehicle Type": vehicle_type
         })
     return pd.DataFrame(bus_data)
 
 # User input for bus stop code
-bus_stop_code = st.text_input("Enter Bus Stop Code")
+bus_stop_code = st.text_input("Enter Bus Stop Code", "12101")
 
 # Validate bus stop code and fetch data
 if bus_stop_code:
@@ -57,6 +99,6 @@ if bus_stop_code:
         st.dataframe(data)
         
         # Optional: Add a bar chart for estimated arrival times
-        st.bar_chart(data.set_index("BusNumber")["EstimatedArrival"])
+        st.bar_chart(data.set_index("Bus Number")["Estimated Arrival"])
     else:
         st.error(f"Bus Stop Code {bus_stop_code} is invalid or no data available. Please enter a valid bus stop code.")
