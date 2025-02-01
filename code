@@ -1,1 +1,62 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import streamlit as st
+import requests
+import pandas as pd
 
+# LTA DataMall API details
+API_URL = "https://datamall2.mytransport.sg/ltaodataservice/v3/BusArrival"
+ACCOUNT_KEY = "TcWqdsjZRBqj1mj/t1QNDg=="  # Replace with your LTA DataMall API key
+
+# Title
+st.title("Real-Time Bus Arrival Information")
+
+# Function to fetch bus arrival data
+def fetch_bus_arrival_data(bus_stop_code):
+    headers = {"AccountKey": ACCOUNT_KEY}
+    params = {"BusStopCode": bus_stop_code}
+    response = requests.get(API_URL, headers=headers, params=params)
+    
+    if response.status_code == 200:
+        data = response.json()
+        if "Services" in data:
+            return data["Services"]
+        else:
+            return None
+    else:
+        return None
+
+# Function to parse and format the data
+def parse_bus_arrival_data(services):
+    bus_data = []
+    for service in services:
+        bus_data.append({
+            "BusNumber": service["ServiceNo"],
+            "EstimatedArrival": service["NextBus"]["EstimatedArrival"],
+            "Load": service["NextBus"]["Load"],
+            "Feature": service["NextBus"]["Feature"],
+            "Type": service["NextBus"]["Type"]
+        })
+    return pd.DataFrame(bus_data)
+
+# User input for bus stop code
+bus_stop_code = st.text_input("Enter Bus Stop Code")
+
+# Validate bus stop code and fetch data
+if bus_stop_code:
+    services = fetch_bus_arrival_data(bus_stop_code)
+    if services:
+        st.success(f"Bus Stop Code {bus_stop_code} is valid. Fetching real-time arrival times...")
+        
+        # Parse and format the data
+        data = parse_bus_arrival_data(services)
+        
+        # Display bus arrival times
+        st.write(f"Bus Arrival Times for Stop Code: {bus_stop_code}")
+        st.dataframe(data)
+        
+        # Optional: Add a bar chart for estimated arrival times
+        st.bar_chart(data.set_index("BusNumber")["EstimatedArrival"])
+    else:
+        st.error(f"Bus Stop Code {bus_stop_code} is invalid or no data available. Please enter a valid bus stop code.")
