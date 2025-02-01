@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # LTA DataMall API details
 API_URL = "https://datamall2.mytransport.sg/ltaodataservice/v3/BusArrival"
@@ -40,8 +40,6 @@ def parse_bus_arrival_data(services):
     bus_data = []
     for service in services:
         next_bus = service["NextBus"]
-        second_bus = service["NextBus2"]
-        third_bus = service["NextBus3"]
         
         # Convert "SD" to "Single Deck", "DD" to "Double Deck", etc.
         vehicle_type = next_bus["Type"]
@@ -69,18 +67,32 @@ def parse_bus_arrival_data(services):
         # Convert ISO timestamp to a user-friendly format (e.g., "09:44 AM")
         estimated_arrival = next_bus["EstimatedArrival"]
         if estimated_arrival:
-            estimated_arrival = datetime.fromisoformat(estimated_arrival).strftime("%I:%M %p")
+            estimated_arrival = datetime.fromisoformat(estimated_arrival.replace("Z", "+00:00")).astimezone()
+            estimated_arrival_str = estimated_arrival.strftime("%I:%M %p")
         else:
-            estimated_arrival = "Not Available"
+            estimated_arrival_str = "Not Available"
+            estimated_arrival = None
         
         bus_data.append({
             "Bus Number": service["ServiceNo"],
-            "Estimated Arrival": estimated_arrival,
+            "Estimated Arrival": estimated_arrival_str,
+            "Estimated Arrival Time": estimated_arrival,
             "Load": load,
             "Feature": feature,
             "Vehicle Type": vehicle_type
         })
     return pd.DataFrame(bus_data)
+
+# Function to get color based on load
+def get_load_color(load):
+    if load == "Seats Available":
+        return "#4CAF50"  # Green
+    elif load == "Standing Available":
+        return "#FFC107"  # Yellow
+    elif load == "Limited Standing":
+        return "#F44336"  # Red
+    else:
+        return "#000000"  # Default black
 
 # User input for bus stop code
 bus_stop_code = st.text_input("Enter Bus Stop Code", "12101")
@@ -102,11 +114,23 @@ if bus_stop_code:
         
         for index, row in data.iterrows():
             with cols[index % 2]:  # Distribute cards across columns
+                # Calculate time left until arrival
+                if row["Estimated Arrival Time"]:
+                    time_left = (row["Estimated Arrival Time"] - datetime.now().astimezone()).total_seconds() / 60  # Time left in minutes
+                    time_left = max(0, int(time_left))  # Ensure time left is not negative
+                else:
+                    time_left = "N/A"
+                
+                # Get color for load
+                load_color = get_load_color(row["Load"])
+                
+                # Display card with highlighted and enlarged time left
                 st.markdown(
                     f"""
                     <div style="border: 1px solid #e0e0e0; border-radius: 10px; padding: 10px; margin: 10px 0;">
                         <h3>Bus {row['Bus Number']}</h3>
                         <p><b>Estimated Arrival:</b> {row['Estimated Arrival']}</p>
+                        <p style="font-size: 24px; font-weight: bold; color: {load_color};"><b>Time Left:</b> {time_left} mins</p>
                         <p><b>Load:</b> {row['Load']}</p>
                         <p><b>Feature:</b> {row['Feature']}</p>
                         <p><b>Vehicle Type:</b> {row['Vehicle Type']}</p>
@@ -114,14 +138,5 @@ if bus_stop_code:
                     """,
                     unsafe_allow_html=True
                 )
-        
-        # Optional: Add a countdown timer or progress bar for estimated arrival
-        st.write("### Estimated Arrival Progress")
-        for index, row in data.iterrows():
-            if row["Estimated Arrival"] != "Not Available":
-                arrival_time = datetime.strptime(row["Estimated Arrival"], "%I:%M %p")
-                time_left = (arrival_time - datetime.now()).total_seconds() / 60  # Time left in minutes
-                st.write(f"Bus {row['Bus Number']}: {max(0, int(time_left))} minutes left")
-                st.progress(max(0, min(1, time_left / 30)))  # Progress bar for up to 30 minutes
     else:
         st.error(f"Bus Stop Code {bus_stop_code} is invalid or no data available. Please enter a valid bus stop code.")
